@@ -30,19 +30,42 @@ before_script:
   - sudo cp bin/updatebot /usr/bin/updatebot
   - echo $(jx-release-version) > VERSION
 
-# Enable integration tests
-script:
-  - mvn verify -B
-  - mvn versions:set -DnewVersion=$(cat VERSION)
-  - mvn clean
-  - git add --all"
-  - git commit -m "Release $(cat VERSION) --allow-empty
-  - git tag -fa v$(cat VERSION) -m "Release version $(cat VERSION)"
-  - git push origin v$(cat VERSION)
+stages:
+  - name: verify
+  - name: tag
+    if: type != pull_request
+  - name: deploy
+    if: type != pull_request
+  - name: updatebot
+    if: type != pull_request
 
-  - mvn clean deploy -DskipTests
 
-  - export VERSION| make updatebot/push-version 
+jobs:
+  include:
+    - name: Verify build
+    stage: verify
+    script:
+     - mvn verify -B
+    
+   -name: Create a tag
+   stage: tag
+   script: |
+     mvn versions:set -DnewVersion=$(cat VERSION)
+     mvn clean
+     git add --all
+     git commit -m "Release $(cat VERSION)" --allow-empty
+     git tag -fa v$(cat VERSION) -m "Release version $(cat VERSION)"
+     git push origin v$(cat VERSION)
+    
+   -name: Deploy to nexus
+   stage: deploy
+   script:
+    - mvn clean deploy -DskipTests
+    
+   -name: Update versions in other components 
+   stage: updatebot
+   script:
+    - export VERSION=$(cat VERSION)| make updatebot/push-version
 
 # Send coverage data
 after_success:
